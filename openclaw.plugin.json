@@ -1,0 +1,33 @@
+{
+  "id": "fastapi",
+  "channels": ["fastapi"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "channels": {
+        "type": "object",
+        "properties": {
+          "fastapi": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "callbackUrl": { "type": "string", "format": "uri" },
+              "apiKey": { "type": "string" },
+              "webhookSecret": { "type": "string" },
+              "dmPolicy": { "type": "string", "enum": ["open", "allowlist"] },
+              "allowFrom": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "mediaMaxMb": { "type": "number", "minimum": 1 },
+              "downloadTimeoutMs": { "type": "integer", "minimum": 1000 },
+              "callbackTimeoutMs": { "type": "integer", "minimum": 1000 }
+            }
+          }
+        }
+      }
+    }
+  }
+}
