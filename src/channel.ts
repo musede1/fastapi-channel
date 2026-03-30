@@ -124,6 +124,10 @@ export const fastApiPlugin: ChannelPlugin<ResolvedFastApiAccount> = {
   gateway: {
     startAccount: async (ctx) => {
       ctx.log?.info(`fastapi channel started for account ${ctx.accountId}`);
+      // Keep alive until gateway signals abort
+      await new Promise<void>((resolve) => {
+        ctx.abortSignal.addEventListener("abort", () => resolve(), { once: true });
+      });
     },
   },
 };

@@ -1,11 +1,16 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { ClawdbotConfig } from "openclaw/plugin-sdk";
+import {
+  createReplyPrefixContext,
+  DEFAULT_ACCOUNT_ID,
+} from "openclaw/plugin-sdk";
 import type { InboundWebhookPayload, FastApiTaskContext, DownloadedFile } from "./types.js";
 import { downloadFile, resolveFilename, inferPlaceholder } from "./client.js";
 import { resolveAccount } from "./account.js";
+import { getFastApiRuntime } from "./runtime.js";
+import type { PluginRuntime } from "openclaw/plugin-sdk";
 
 /**
  * Parse and validate an inbound webhook payload from FastAPI.
- * Returns null if the payload is invalid.
  */
 export function parseWebhookPayload(body: unknown): InboundWebhookPayload | null {
   if (!body || typeof body !== "object") return null;
@@ -47,19 +52,18 @@ export function parseWebhookPayload(body: unknown): InboundWebhookPayload | null
 
 /**
  * Validate the inbound webhook secret.
- * Returns true if no secret is configured (disabled) or if the secret matches.
  */
 export function validateWebhookSecret(
   expectedSecret: string | undefined,
   providedSecret: string | undefined,
 ): boolean {
-  if (!expectedSecret) return true; // no validation configured
+  if (!expectedSecret) return true;
   if (!providedSecret) return false;
   return expectedSecret === providedSecret;
 }
 
 /**
- * Check if the sender is allowed based on the dmPolicy and allowFrom list.
+ * Check if the sender is allowed.
  */
 export function isSenderAllowed(params: {
   userId: string;
@@ -73,17 +77,16 @@ export function isSenderAllowed(params: {
 }
 
 /**
- * Download all files referenced in the payload and save them locally.
- * Skips files that fail to download (logs error, continues).
+ * Download all files referenced in the payload.
  */
 async function downloadAllFiles(params: {
-  api: OpenClawPluginApi;
+  core: PluginRuntime;
   fileRefs: InboundWebhookPayload["file_urls"];
   maxBytes: number;
   timeoutMs: number;
   log: (msg: string) => void;
 }): Promise<DownloadedFile[]> {
-  const { api, fileRefs, maxBytes, timeoutMs, log } = params;
+  const { core, fileRefs, maxBytes, timeoutMs, log } = params;
   if (!fileRefs || fileRefs.length === 0) return [];
 
   const results: DownloadedFile[] = [];
@@ -98,8 +101,7 @@ async function downloadAllFiles(params: {
         timeoutMs,
       });
 
-      // Save to OpenClaw's media store
-      const saved = await api.runtime.channel.media.saveMediaBuffer(
+      const saved = await core.channel.media.saveMediaBuffer(
         buffer,
         contentType,
         "inbound",
@@ -126,7 +128,6 @@ async function downloadAllFiles(params: {
 
 /**
  * Build the agent body text from the task context.
- * Includes sender attribution, file placeholders, and quoted task description.
  */
 export function buildAgentBody(ctx: FastApiTaskContext): string {
   const sender = ctx.userName ?? ctx.userId;
@@ -144,28 +145,21 @@ export function buildAgentBody(ctx: FastApiTaskContext): string {
  * Handle a parsed inbound payload: download files, build context, dispatch to agent.
  */
 export async function handleFastApiMessage(params: {
-  api: OpenClawPluginApi;
+  cfg: ClawdbotConfig;
   payload: InboundWebhookPayload;
   log?: (msg: string) => void;
 }): Promise<void> {
-  const { api, payload, log = console.log } = params;
+  const { cfg, payload, log = console.log } = params;
 
-  // Heartbeats are no-ops
   if (payload.event_type === "heartbeat") {
     log(`fastapi: heartbeat received, task_id=${payload.task_id}`);
     return;
   }
 
-  const cfg = api.config;
-  if (!cfg) {
-    log("fastapi: no config available, dropping message");
-    return;
-  }
-
+  const core = getFastApiRuntime();
   const account = resolveAccount(cfg);
   const fastapiCfg = account.config;
 
-  // Sender allowlist check
   const userId = payload.user_id ?? "system";
   if (
     !isSenderAllowed({
@@ -180,12 +174,11 @@ export async function handleFastApiMessage(params: {
 
   log(`fastapi: handling task_id=${payload.task_id} from user=${userId}`);
 
-  // Download file attachments
   const maxBytes = (fastapiCfg.mediaMaxMb ?? 20) * 1024 * 1024;
   const downloadTimeoutMs = fastapiCfg.downloadTimeoutMs ?? 30_000;
 
   const localFiles = await downloadAllFiles({
-    api,
+    core,
     fileRefs: payload.file_urls,
     maxBytes,
     timeoutMs: downloadTimeoutMs,
@@ -202,26 +195,89 @@ export async function handleFastApiMessage(params: {
     replyToTaskId: payload.reply_to_task_id,
   };
 
-  const agentBody = buildAgentBody(ctx);
+  const messageBody = buildAgentBody(ctx);
+  const fastapiFrom = `fastapi:${userId}`;
+  const fastapiTo = `user:${userId}`;
 
-  // Build media payload for attached files
-  const mediaPayload =
-    localFiles.length > 0
-      ? localFiles.map((f) => ({
-          path: f.path,
-          contentType: f.contentType,
-          placeholder: f.placeholder,
-        }))
-      : undefined;
-
-  // Dispatch to OpenClaw agent
-  // user_id becomes the "from" peer so each user gets their own session
-  await api.runtime.channel.messaging.dispatch({
+  // Resolve agent route
+  const route = core.channel.routing.resolveAgentRoute({
+    cfg,
     channel: "fastapi",
-    accountId: account.accountId,
-    from: `fastapi:${userId}`,
-    to: `user:${userId}`,
-    body: agentBody,
-    media: mediaPayload,
+    accountId: DEFAULT_ACCOUNT_ID,
+    from: fastapiFrom,
+    to: fastapiTo,
+    chatType: "direct",
   });
+
+  // Format message envelope
+  const envelopeOptions = core.channel.reply.resolveEnvelopeFormatOptions(cfg);
+  const body = core.channel.reply.formatAgentEnvelope({
+    channel: "FastAPI",
+    from: fastapiFrom,
+    timestamp: new Date(),
+    body: messageBody,
+    ...envelopeOptions,
+  });
+
+  // Finalize inbound context
+  const ctxPayload = core.channel.reply.finalizeInboundContext({
+    Body: body,
+    BodyForAgent: messageBody,
+    RawBody: payload.content,
+    CommandBody: payload.content,
+    From: fastapiFrom,
+    To: fastapiTo,
+    SessionKey: route.sessionKey,
+    AccountId: route.accountId,
+    ChatType: "direct",
+    SenderName: ctx.userName ?? userId,
+    SenderId: userId,
+    Provider: "fastapi" as const,
+    Surface: "fastapi" as const,
+    MessageSid: payload.task_id,
+    Timestamp: Date.now(),
+    WasMentioned: true,
+    CommandAuthorized: true,
+    OriginatingChannel: "fastapi" as const,
+    OriginatingTo: fastapiTo,
+  });
+
+  // Create a simple reply dispatcher
+  const prefixContext = createReplyPrefixContext({ cfg, agentId: route.agentId });
+  const { dispatcher, replyOptions, markDispatchIdle } =
+    core.channel.reply.createReplyDispatcherWithTyping({
+      responsePrefix: prefixContext.responsePrefix,
+      responsePrefixContextProvider: prefixContext.responsePrefixContextProvider,
+      humanDelay: core.channel.reply.resolveHumanDelayConfig(cfg, route.agentId),
+      deliver: async () => {
+        // Outbound delivery is handled by channel.ts outbound.sendText
+      },
+      onError: async (error) => {
+        log(`fastapi: reply error: ${String(error)}`);
+      },
+      onIdle: async () => {},
+      onCleanup: () => {},
+    });
+
+  log(`fastapi: dispatching to agent (session=${route.sessionKey})`);
+  const { queuedFinal, counts } = await core.channel.reply.withReplyDispatcher({
+    dispatcher,
+    onSettled: () => {
+      markDispatchIdle();
+    },
+    run: () =>
+      core.channel.reply.dispatchReplyFromConfig({
+        ctx: ctxPayload,
+        cfg,
+        dispatcher,
+        replyOptions: {
+          ...replyOptions,
+          onModelSelected: prefixContext.onModelSelected,
+        },
+      }),
+  });
+
+  log(
+    `fastapi: dispatch complete (queuedFinal=${queuedFinal}, replies=${counts.final})`,
+  );
 }

@@ -3,6 +3,7 @@ import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 import { fastApiPlugin } from "./src/channel.js";
 import { parseWebhookPayload, validateWebhookSecret, handleFastApiMessage } from "./src/bot.js";
 import { resolveAccount } from "./src/account.js";
+import { setFastApiRuntime } from "./src/runtime.js";
 
 const plugin = {
   id: "fastapi",
@@ -11,6 +12,7 @@ const plugin = {
     "Dispatch tasks from a FastAPI/Fastify service to OpenClaw via HTTP webhooks.",
   configSchema: emptyPluginConfigSchema(),
   register(api: OpenClawPluginApi) {
+    setFastApiRuntime(api.runtime);
     api.registerChannel({ plugin: fastApiPlugin });
 
     const fastapiCfg = api.config ? resolveAccount(api.config).config : null;
@@ -72,7 +74,12 @@ const plugin = {
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify({ ok: true, task_id: payload.task_id }));
 
-        handleFastApiMessage({ api, payload, log }).catch((err) => {
+        if (!cfg) {
+          log("fastapi: no config available, dropping message");
+          return true;
+        }
+
+        handleFastApiMessage({ cfg, payload, log }).catch((err) => {
           logErr(`fastapi: error handling task_id=${payload.task_id}: ${String(err)}`);
         });
 
