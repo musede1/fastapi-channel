@@ -1,5 +1,5 @@
 {
-  "name": "@openclaw/fastapi-channel",
+  "name": "@openclaw/fastapi",
   "version": "1.0.0",
   "description": "OpenClaw FastAPI channel plugin — dispatch tasks from a FastAPI service to OpenClaw",
   "type": "module",

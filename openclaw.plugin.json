@@ -13,7 +13,7 @@
             "additionalProperties": false,
             "properties": {
               "enabled": { "type": "boolean" },
-              "callbackUrl": { "type": "string", "format": "uri" },
+              "callbackUrl": { "type": "string" },
               "apiKey": { "type": "string" },
               "webhookSecret": { "type": "string" },
               "dmPolicy": { "type": "string", "enum": ["open", "allowlist"] },
