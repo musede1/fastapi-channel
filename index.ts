@@ -1,30 +1,21 @@
-import { defineChannelPluginEntry } from "openclaw/plugin-sdk/core";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { emptyPluginConfigSchema } from "openclaw/plugin-sdk";
 import { fastApiPlugin } from "./src/channel.js";
 import { parseWebhookPayload, validateWebhookSecret, handleFastApiMessage } from "./src/bot.js";
 import { resolveAccount } from "./src/account.js";
 
-export default defineChannelPluginEntry({
+const plugin = {
   id: "fastapi",
   name: "FastAPI Channel",
   description:
-    "Dispatch tasks from a FastAPI service to OpenClaw via HTTP webhooks. " +
-    "FastAPI sends tasks (with optional file URLs); OpenClaw processes them and POSTs results back.",
-  plugin: fastApiPlugin,
+    "Dispatch tasks from a FastAPI/Fastify service to OpenClaw via HTTP webhooks.",
+  configSchema: emptyPluginConfigSchema(),
+  register(api: OpenClawPluginApi) {
+    api.registerChannel({ plugin: fastApiPlugin });
 
-  registerFull(api) {
     const fastapiCfg = api.config ? resolveAccount(api.config).config : null;
     const webhookPath = fastapiCfg?.webhookPath ?? "/fastapi-channel/webhook";
 
-    /**
-     * Inbound webhook: FastAPI → OpenClaw
-     *
-     * FastAPI POSTs task payloads here. The handler:
-     * 1. Validates the webhook secret (if configured)
-     * 2. Parses the payload
-     * 3. Downloads any file attachments
-     * 4. Dispatches the task to the OpenClaw agent (fire-and-forget)
-     * 5. Returns 200 immediately (does NOT wait for AI)
-     */
     api.registerHttpRoute({
       path: webhookPath,
       auth: "plugin",
@@ -32,7 +23,6 @@ export default defineChannelPluginEntry({
         const log = api.logger?.info?.bind(api.logger) ?? console.log;
         const logErr = api.logger?.error?.bind(api.logger) ?? console.error;
 
-        // Only allow POST
         if (req.method !== "POST") {
           res.statusCode = 405;
           res.setHeader("Allow", "POST");
@@ -40,7 +30,6 @@ export default defineChannelPluginEntry({
           return true;
         }
 
-        // Validate webhook secret
         const cfg = api.config;
         const account = cfg ? resolveAccount(cfg) : null;
         const expectedSecret = account?.webhookSecret;
@@ -53,7 +42,6 @@ export default defineChannelPluginEntry({
           return true;
         }
 
-        // Parse JSON body
         let body: unknown;
         try {
           const chunks: Buffer[] = [];
@@ -68,7 +56,6 @@ export default defineChannelPluginEntry({
           return true;
         }
 
-        // Parse payload
         const payload = parseWebhookPayload(body);
         if (!payload) {
           res.statusCode = 400;
@@ -81,16 +68,13 @@ export default defineChannelPluginEntry({
           return true;
         }
 
-        // Respond immediately — do not wait for AI processing
         res.statusCode = 200;
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify({ ok: true, task_id: payload.task_id }));
 
-        // Process task asynchronously (fire-and-forget)
-        handleFastApiMessage({ api, payload, log })
-          .catch((err) => {
-            logErr(`fastapi: error handling task_id=${payload.task_id}: ${String(err)}`);
-          });
+        handleFastApiMessage({ api, payload, log }).catch((err) => {
+          logErr(`fastapi: error handling task_id=${payload.task_id}: ${String(err)}`);
+        });
 
         return true;
       },
@@ -102,4 +86,6 @@ export default defineChannelPluginEntry({
       (api.logger?.info ?? console.log)(msg);
     }
   },
-});
+};
+
+export default plugin;

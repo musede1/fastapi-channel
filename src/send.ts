@@ -1,6 +1,6 @@
 import { postResultToFastApi } from "./client.js";
 import { resolveAccount } from "./account.js";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { OutboundResultPayload, TaskStatus } from "./types.js";
 
 /**

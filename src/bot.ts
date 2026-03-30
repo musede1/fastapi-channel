@@ -1,4 +1,4 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import type { InboundWebhookPayload, FastApiTaskContext, DownloadedFile } from "./types.js";
 import { downloadFile, resolveFilename, inferPlaceholder } from "./client.js";
 import { resolveAccount } from "./account.js";

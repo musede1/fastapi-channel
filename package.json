@@ -1,7 +1,7 @@
 {
   "name": "@openclaw/fastapi",
   "version": "1.0.0",
-  "description": "OpenClaw FastAPI channel plugin — dispatch tasks from a FastAPI service to OpenClaw",
+  "description": "OpenClaw FastAPI channel plugin — dispatch tasks from a FastAPI/Fastify service to OpenClaw",
   "type": "module",
   "dependencies": {
     "@sinclair/typebox": "0.34.48",
@@ -11,12 +11,11 @@
     "extensions": [
       "./index.ts"
     ],
-    "setupEntry": "./setup-entry.ts",
     "channel": {
       "id": "fastapi",
       "label": "FastAPI",
       "selectionLabel": "FastAPI Channel",
-      "blurb": "Dispatch tasks from a FastAPI service to OpenClaw via HTTP webhooks.",
+      "blurb": "Dispatch tasks from a FastAPI/Fastify service to OpenClaw via HTTP webhooks.",
       "order": 90
     }
   }
