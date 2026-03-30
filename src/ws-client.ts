@@ -24,6 +24,7 @@ export function createWsClient(opts: WsClientOptions) {
   const { url, onMessage, log, abortSignal } = opts;
   let ws: WebSocket | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let pingTimer: ReturnType<typeof setInterval> | null = null;
   let attempt = 0;
 
   function connect() {
@@ -35,6 +36,11 @@ export function createWsClient(opts: WsClientOptions) {
     ws.on("open", () => {
       attempt = 0;
       log(`fastapi-ws: connected to ${url}`);
+      // Heartbeat every 30s to keep nginx from closing the connection
+      if (pingTimer) clearInterval(pingTimer);
+      pingTimer = setInterval(() => {
+        if (ws?.readyState === WebSocket.OPEN) ws.ping();
+      }, 30_000);
     });
 
     ws.on("message", (data) => {
@@ -51,6 +57,7 @@ export function createWsClient(opts: WsClientOptions) {
     ws.on("close", () => {
       log(`fastapi-ws: disconnected`);
       ws = null;
+      if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
       scheduleReconnect();
     });
 
