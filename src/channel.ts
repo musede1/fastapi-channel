@@ -9,6 +9,7 @@ import { createWsClient } from "./ws-client.js";
 import { setWsClient, getWsClient } from "./ws-send.js";
 import { setFastApiRuntime } from "./runtime.js";
 import { handleFastApiMessage } from "./bot.js";
+import { getTaskId } from "./task-map.js";
 import type { ResolvedFastApiAccount } from "./types.js";
 
 const meta: ChannelMeta = {
@@ -84,32 +85,20 @@ export const fastApiPlugin: ChannelPlugin<ResolvedFastApiAccount> = {
     normalizeTarget: (raw) => raw ?? undefined,
   },
   outbound: {
-    sendText: async (params) => {
-      const taskIdMatch = params.body?.match(/\[task_id:\s*([^\]]+)\]/);
-      const taskId = taskIdMatch?.[1]?.trim() ?? "unknown";
-
-      const metaMatch = params.body?.match(/\[metadata:\s*({[^}]+})\]/);
-      let metadata: Record<string, unknown> | undefined;
-      if (metaMatch) {
-        try {
-          metadata = JSON.parse(metaMatch[1]);
-        } catch {
-          // ignore
-        }
-      }
-
+    deliveryMode: "direct",
+    textChunkLimit: 4000,
+    sendText: async ({ cfg, to, text, accountId }) => {
       const client = getWsClient();
+      const taskId = getTaskId(to ?? "") ?? "unknown";
       if (client) {
         client.sendResult({
           task_id: taskId,
           status: "completed",
-          content: params.text,
+          content: text,
           timestamp: Math.floor(Date.now() / 1000),
-          metadata,
         });
       }
-
-      return { messageId: `fastapi-reply-${Date.now()}` };
+      return { channel: "fastapi", messageId: `fastapi-reply-${Date.now()}` };
     },
   },
   status: {

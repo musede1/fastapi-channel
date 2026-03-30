@@ -7,6 +7,8 @@ import type { InboundWebhookPayload, FastApiTaskContext, DownloadedFile } from "
 import { downloadFile, resolveFilename, inferPlaceholder } from "./client.js";
 import { resolveAccount } from "./account.js";
 import { getFastApiRuntime } from "./runtime.js";
+import { setTaskId } from "./task-map.js";
+import { getWsClient } from "./ws-send.js";
 import type { PluginRuntime } from "openclaw/plugin-sdk";
 
 /**
@@ -199,6 +201,9 @@ export async function handleFastApiMessage(params: {
   const fastapiFrom = `fastapi:${userId}`;
   const fastapiTo = `user:${userId}`;
 
+  // Store task_id mapping so outbound.sendText can find it
+  setTaskId(fastapiTo, payload.task_id);
+
   // Resolve agent route
   const route = core.channel.routing.resolveAgentRoute({
     cfg,
@@ -249,8 +254,22 @@ export async function handleFastApiMessage(params: {
       responsePrefix: prefixContext.responsePrefix,
       responsePrefixContextProvider: prefixContext.responsePrefixContextProvider,
       humanDelay: core.channel.reply.resolveHumanDelayConfig(cfg, route.agentId),
-      deliver: async () => {
-        // Outbound delivery is handled by channel.ts outbound.sendText
+      deliver: async (replyPayload) => {
+        const text = replyPayload.text ?? "";
+        if (!text.trim()) return;
+
+        const client = getWsClient();
+        if (client) {
+          client.sendResult({
+            task_id: payload.task_id,
+            status: "completed",
+            content: text,
+            timestamp: Math.floor(Date.now() / 1000),
+          });
+          log(`fastapi: sent result for task_id=${payload.task_id} via WS`);
+        } else {
+          log(`fastapi: WS not connected, result lost for task_id=${payload.task_id}`);
+        }
       },
       onError: async (error) => {
         log(`fastapi: reply error: ${String(error)}`);
