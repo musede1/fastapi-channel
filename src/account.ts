@@ -5,9 +5,6 @@ import { FastApiConfigSchema } from "./config-schema.js";
 const CHANNEL_KEY = "fastapi";
 const DEFAULT_ACCOUNT_ID = "default";
 
-/**
- * Read and validate the FastAPI channel config from the global ClawdbotConfig.
- */
 function readFastApiConfig(cfg: ClawdbotConfig): FastApiConfig | undefined {
   const raw = (cfg.channels as Record<string, unknown> | undefined)?.[CHANNEL_KEY];
   if (!raw || typeof raw !== "object") return undefined;
@@ -18,22 +15,16 @@ function readFastApiConfig(cfg: ClawdbotConfig): FastApiConfig | undefined {
   return parsed.data;
 }
 
-/**
- * Resolve the FastAPI account from the global config.
- */
 export function resolveAccount(cfg: ClawdbotConfig): ResolvedFastApiAccount {
   const fastapiCfg = readFastApiConfig(cfg);
 
-  const configured = Boolean(fastapiCfg?.callbackUrl?.trim());
+  const configured = Boolean(fastapiCfg?.wsUrl?.trim());
   const enabled = Boolean(fastapiCfg?.enabled !== false && configured);
 
   return {
     accountId: DEFAULT_ACCOUNT_ID,
     enabled,
     configured,
-    callbackUrl: fastapiCfg?.callbackUrl,
-    apiKey: fastapiCfg?.apiKey,
-    webhookSecret: fastapiCfg?.webhookSecret,
     config: fastapiCfg ?? ({} as FastApiConfig),
   };
 }

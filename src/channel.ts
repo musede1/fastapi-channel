@@ -1,18 +1,21 @@
-import type { ChannelMeta, ChannelPlugin, ClawdbotConfig } from "openclaw/plugin-sdk";
+import type { ChannelMeta, ChannelPlugin } from "openclaw/plugin-sdk";
 import {
   createDefaultChannelRuntimeState,
   buildBaseChannelStatusSummary,
   DEFAULT_ACCOUNT_ID,
 } from "openclaw/plugin-sdk";
 import { resolveAccount } from "./account.js";
-import { sendResultToFastApi } from "./send.js";
+import { createWsClient } from "./ws-client.js";
+import { setWsClient, getWsClient } from "./ws-send.js";
+import { setFastApiRuntime } from "./runtime.js";
+import { handleFastApiMessage } from "./bot.js";
 import type { ResolvedFastApiAccount } from "./types.js";
 
 const meta: ChannelMeta = {
   id: "fastapi",
   label: "FastAPI",
   selectionLabel: "FastAPI Channel",
-  blurb: "Dispatch tasks from a FastAPI/Fastify service to OpenClaw via HTTP webhooks.",
+  blurb: "Connect to a Fastify/FastAPI service via WebSocket.",
   order: 90,
 };
 
@@ -36,15 +39,11 @@ export const fastApiPlugin: ChannelPlugin<ResolvedFastApiAccount> = {
       additionalProperties: false,
       properties: {
         enabled: { type: "boolean" },
-        callbackUrl: { type: "string" },
-        apiKey: { type: "string" },
-        webhookSecret: { type: "string" },
-        webhookPath: { type: "string" },
+        wsUrl: { type: "string" },
         dmPolicy: { type: "string", enum: ["open", "allowlist"] },
         allowFrom: { type: "array", items: { type: "string" } },
         mediaMaxMb: { type: "number", minimum: 1 },
         downloadTimeoutMs: { type: "integer", minimum: 1000 },
-        callbackTimeoutMs: { type: "integer", minimum: 1000 },
       },
     },
   },
@@ -57,7 +56,7 @@ export const fastApiPlugin: ChannelPlugin<ResolvedFastApiAccount> = {
       accountId: account.accountId,
       enabled: account.enabled,
       configured: account.configured,
-      callbackUrl: account.callbackUrl ?? "not set",
+      wsUrl: account.config?.wsUrl ?? "not set",
     }),
     resolveAllowFrom: ({ cfg }) => {
       const account = resolveAccount(cfg);
@@ -99,13 +98,16 @@ export const fastApiPlugin: ChannelPlugin<ResolvedFastApiAccount> = {
         }
       }
 
-      await sendResultToFastApi({
-        api: params.api,
-        taskId,
-        content: params.text,
-        status: "completed",
-        metadata,
-      });
+      const client = getWsClient();
+      if (client) {
+        client.sendResult({
+          task_id: taskId,
+          status: "completed",
+          content: params.text,
+          timestamp: Math.floor(Date.now() / 1000),
+          metadata,
+        });
+      }
 
       return { messageId: `fastapi-reply-${Date.now()}` };
     },
@@ -123,8 +125,44 @@ export const fastApiPlugin: ChannelPlugin<ResolvedFastApiAccount> = {
   },
   gateway: {
     startAccount: async (ctx) => {
-      ctx.log?.info(`fastapi channel started for account ${ctx.accountId}`);
-      // Keep alive until gateway signals abort
+      const account = resolveAccount(ctx.cfg);
+      const wsUrl = account.config?.wsUrl;
+
+      if (!wsUrl) {
+        ctx.log?.info(`fastapi: no wsUrl configured, channel idle`);
+        await new Promise<void>((resolve) => {
+          ctx.abortSignal.addEventListener("abort", () => resolve(), { once: true });
+        });
+        return;
+      }
+
+      const client = createWsClient({
+        url: wsUrl,
+        log: (msg) => ctx.log?.info(msg),
+        abortSignal: ctx.abortSignal,
+        onMessage: (msg) => {
+          handleFastApiMessage({
+            cfg: ctx.cfg,
+            payload: {
+              event_type: "task",
+              task_id: msg.task_id,
+              content: msg.content,
+              user_id: msg.user_id ?? "system",
+              user_name: msg.user_name,
+              metadata: msg.metadata,
+              reply_to_task_id: null,
+            },
+            log: (m) => ctx.log?.info(m),
+          }).catch((err) => {
+            ctx.log?.error(`fastapi: error handling task_id=${msg.task_id}: ${String(err)}`);
+          });
+        },
+      });
+
+      setWsClient(client);
+      ctx.log?.info(`fastapi: WebSocket channel started, connecting to ${wsUrl}`);
+
+      // Keep alive until abort
       await new Promise<void>((resolve) => {
         ctx.abortSignal.addEventListener("abort", () => resolve(), { once: true });
       });

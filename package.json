@@ -1,10 +1,11 @@
 {
   "name": "@openclaw/fastapi",
   "version": "1.0.0",
-  "description": "OpenClaw FastAPI channel plugin — dispatch tasks from a FastAPI/Fastify service to OpenClaw",
+  "description": "OpenClaw FastAPI channel plugin — WebSocket-based bidirectional communication",
   "type": "module",
   "dependencies": {
     "@sinclair/typebox": "0.34.48",
+    "ws": "^8.18.0",
     "zod": "^4.3.6"
   },
   "openclaw": {
@@ -15,7 +16,7 @@
       "id": "fastapi",
       "label": "FastAPI",
       "selectionLabel": "FastAPI Channel",
-      "blurb": "Dispatch tasks from a FastAPI/Fastify service to OpenClaw via HTTP webhooks.",
+      "blurb": "Connect to a Fastify/FastAPI service via WebSocket.",
       "order": 90
     }
   }
