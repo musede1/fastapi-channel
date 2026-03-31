@@ -204,7 +204,7 @@ export async function handleFastApiMessage(params: {
   // Store task_id mapping so outbound.sendText can find it
   setTaskId(fastapiTo, payload.task_id);
 
-  // Resolve agent route
+  // Resolve agent route, then override session key to ensure isolation
   const route = core.channel.routing.resolveAgentRoute({
     cfg,
     channel: "fastapi",
@@ -213,6 +213,9 @@ export async function handleFastApiMessage(params: {
     to: fastapiTo,
     chatType: "direct",
   });
+
+  // Force unique session per task
+  const sessionKey = `agent:${route.agentId}:fastapi:direct:${payload.task_id}`;
 
   // Format message envelope
   const envelopeOptions = core.channel.reply.resolveEnvelopeFormatOptions(cfg);
@@ -232,7 +235,7 @@ export async function handleFastApiMessage(params: {
     CommandBody: payload.content,
     From: fastapiFrom,
     To: fastapiTo,
-    SessionKey: route.sessionKey,
+    SessionKey: sessionKey,
     AccountId: route.accountId,
     ChatType: "direct",
     SenderName: ctx.userName ?? userId,
@@ -275,7 +278,7 @@ export async function handleFastApiMessage(params: {
       onCleanup: () => {},
     });
 
-  log(`fastapi: dispatching to agent (session=${route.sessionKey})`);
+  log(`fastapi: dispatching to agent (session=${sessionKey})`);
   const { queuedFinal, counts } = await core.channel.reply.withReplyDispatcher({
     dispatcher,
     onSettled: () => {
