@@ -1,4 +1,4 @@
-import type { ClawdbotConfig } from "openclaw/plugin-sdk";
+import type { ClawdbotConfig } from "openclaw/plugin-sdk/core";
 import type { ResolvedFastApiAccount, FastApiConfig } from "./types.js";
 import { FastApiConfigSchema } from "./config-schema.js";
 

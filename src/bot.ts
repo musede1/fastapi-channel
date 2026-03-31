@@ -1,15 +1,13 @@
-import type { ClawdbotConfig } from "openclaw/plugin-sdk";
-import {
-  createReplyPrefixContext,
-  DEFAULT_ACCOUNT_ID,
-} from "openclaw/plugin-sdk";
+import type { ClawdbotConfig } from "openclaw/plugin-sdk/core";
+import type { PluginRuntime } from "openclaw/plugin-sdk/core";
+import { createReplyPrefixContext } from "openclaw/plugin-sdk/channel-runtime";
+import { DEFAULT_ACCOUNT_ID } from "openclaw/plugin-sdk/account-id";
 import type { InboundWebhookPayload, FastApiTaskContext, DownloadedFile } from "./types.js";
 import { downloadFile, resolveFilename, inferPlaceholder } from "./client.js";
 import { resolveAccount } from "./account.js";
 import { getFastApiRuntime } from "./runtime.js";
 import { setTaskId } from "./task-map.js";
 import { getWsClient } from "./ws-send.js";
-import type { PluginRuntime } from "openclaw/plugin-sdk";
 
 /**
  * Parse and validate an inbound webhook payload from FastAPI.
