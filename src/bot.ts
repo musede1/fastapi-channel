@@ -198,8 +198,8 @@ export async function handleFastApiMessage(params: {
   };
 
   const messageBody = buildAgentBody(ctx);
-  const fastapiFrom = `fastapi:${userId}`;
-  const fastapiTo = `user:${userId}`;
+  const fastapiFrom = `fastapi:task:${payload.task_id}`;
+  const fastapiTo = `task:${payload.task_id}`;
 
   // Store task_id mapping so outbound.sendText can find it
   setTaskId(fastapiTo, payload.task_id);
@@ -255,7 +255,7 @@ export async function handleFastApiMessage(params: {
       responsePrefixContextProvider: prefixContext.responsePrefixContextProvider,
       humanDelay: core.channel.reply.resolveHumanDelayConfig(cfg, route.agentId),
       deliver: async (replyPayload) => {
-        const text = replyPayload.text ?? "";
+        const text = replyPayload?.text ?? String(replyPayload ?? "");
         if (!text.trim()) return;
 
         const client = getWsClient();
@@ -266,9 +266,6 @@ export async function handleFastApiMessage(params: {
             content: text,
             timestamp: Math.floor(Date.now() / 1000),
           });
-          log(`fastapi: sent result for task_id=${payload.task_id} via WS`);
-        } else {
-          log(`fastapi: WS not connected, result lost for task_id=${payload.task_id}`);
         }
       },
       onError: async (error) => {
