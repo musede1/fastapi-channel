@@ -249,28 +249,37 @@ export async function handleFastApiMessage(params: {
   });
 
   // Create a simple reply dispatcher
+  let accumulatedText = "";
   const prefixContext = createReplyPrefixContext({ cfg, agentId: route.agentId });
   const { dispatcher, replyOptions, markDispatchIdle } =
     core.channel.reply.createReplyDispatcherWithTyping({
       responsePrefix: prefixContext.responsePrefix,
       responsePrefixContextProvider: prefixContext.responsePrefixContextProvider,
       humanDelay: core.channel.reply.resolveHumanDelayConfig(cfg, route.agentId),
-      deliver: async (replyPayload) => {
+      deliver: async (replyPayload, info) => {
         const text = replyPayload?.text ?? String(replyPayload ?? "");
         if (!text.trim()) return;
 
-        const client = getWsClient();
-        if (client) {
-          client.sendResult({
-            task_id: payload.task_id,
-            status: "completed",
-            content: text,
-            timestamp: Math.floor(Date.now() / 1000),
-          });
+        // Accumulate text chunks, only send on final
+        if (!accumulatedText) accumulatedText = "";
+        accumulatedText += text;
+
+        if (info?.kind === "final" || !info?.kind) {
+          const client = getWsClient();
+          if (client) {
+            client.sendResult({
+              task_id: payload.task_id,
+              status: "completed",
+              content: accumulatedText,
+              timestamp: Math.floor(Date.now() / 1000),
+            });
+          }
+          accumulatedText = "";
         }
       },
       onError: async (error) => {
         log(`fastapi: reply error: ${String(error)}`);
+        accumulatedText = "";
       },
       onIdle: async () => {},
       onCleanup: () => {},

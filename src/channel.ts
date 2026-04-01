@@ -83,7 +83,7 @@ export const fastApiPlugin: ChannelPlugin<ResolvedFastApiAccount> = {
   },
   outbound: {
     deliveryMode: "direct",
-    textChunkLimit: 4000,
+    textChunkLimit: 100000,
     sendText: async ({ cfg, to, text, accountId }) => {
       const client = getWsClient();
       const taskId = getTaskId(to ?? "") ?? "unknown";
