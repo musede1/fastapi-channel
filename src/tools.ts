@@ -50,11 +50,9 @@ function json(data: unknown) {
 }
 
 export function registerFastApiTools(api: OpenClawPluginApi) {
-  console.log("[FASTAPI] registerFastApiTools called, api.registerTool type:", typeof api.registerTool);
-  try {
   api.registerTool(
     (ctx) => ({
-      name: "submit_keyword_result",
+      name: "fastapi_submit_keyword_result",
       label: "Submit Keyword Result",
       description:
         "提交广告关键词生成结果。必须包含 task_id、sheet1（BMM广泛词）和 sheet2（Exact精准词）。" +
@@ -93,10 +91,6 @@ export function registerFastApiTools(api: OpenClawPluginApi) {
         }
       },
     }),
-    { name: "submit_keyword_result" },
+    { name: "fastapi_submit_keyword_result" },
   );
-  console.log("[FASTAPI] submit_keyword_result registered successfully");
-  } catch (err) {
-    console.error("[FASTAPI] registerTool FAILED:", err);
-  }
 }
