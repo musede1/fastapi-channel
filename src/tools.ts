@@ -43,12 +43,15 @@ const SubmitKeywordSchema = Type.Object({
 });
 
 function json(data: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(data) }] };
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+    details: data,
+  };
 }
 
 export function registerFastApiTools(api: OpenClawPluginApi) {
   api.registerTool(
-    () => ({
+    (ctx) => ({
       name: "submit_keyword_result",
       label: "Submit Keyword Result",
       description:
@@ -56,32 +59,36 @@ export function registerFastApiTools(api: OpenClawPluginApi) {
         "每条数据的所有字段必须填写，空值用\"无\"。",
       parameters: SubmitKeywordSchema,
       async execute(_toolCallId: string, params: unknown) {
-        const p = params as {
-          task_id: string;
-          sheet1: Record<string, unknown>[];
-          sheet2: Record<string, unknown>[];
-        };
+        try {
+          const p = params as {
+            task_id: string;
+            sheet1: Record<string, unknown>[];
+            sheet2: Record<string, unknown>[];
+          };
 
-        const client = getWsClient();
-        if (!client) {
-          return json({ error: "WebSocket not connected" });
+          const client = getWsClient();
+          if (!client) {
+            return json({ error: "WebSocket not connected" });
+          }
+
+          const sent = client.sendResult({
+            task_id: p.task_id,
+            status: "completed",
+            content: JSON.stringify({ sheet1: p.sheet1, sheet2: p.sheet2 }),
+            timestamp: Math.floor(Date.now() / 1000),
+          });
+
+          if (!sent) {
+            return json({ error: "Failed to send result via WebSocket" });
+          }
+
+          return json({
+            ok: true,
+            message: `Submitted: sheet1=${p.sheet1.length} rows, sheet2=${p.sheet2.length} rows`,
+          });
+        } catch (err) {
+          return json({ error: err instanceof Error ? err.message : String(err) });
         }
-
-        const sent = client.sendResult({
-          task_id: p.task_id,
-          status: "completed",
-          content: JSON.stringify({ sheet1: p.sheet1, sheet2: p.sheet2 }),
-          timestamp: Math.floor(Date.now() / 1000),
-        });
-
-        if (!sent) {
-          return json({ error: "Failed to send result via WebSocket" });
-        }
-
-        return json({
-          ok: true,
-          message: `Submitted: sheet1=${p.sheet1.length} rows, sheet2=${p.sheet2.length} rows`,
-        });
       },
     }),
     { name: "submit_keyword_result" },
