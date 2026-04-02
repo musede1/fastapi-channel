@@ -50,6 +50,8 @@ function json(data: unknown) {
 }
 
 export function registerFastApiTools(api: OpenClawPluginApi) {
+  console.log("[FASTAPI] registerFastApiTools called, api.registerTool type:", typeof api.registerTool);
+  try {
   api.registerTool(
     (ctx) => ({
       name: "submit_keyword_result",
@@ -93,4 +95,8 @@ export function registerFastApiTools(api: OpenClawPluginApi) {
     }),
     { name: "submit_keyword_result" },
   );
+  console.log("[FASTAPI] submit_keyword_result registered successfully");
+  } catch (err) {
+    console.error("[FASTAPI] registerTool FAILED:", err);
+  }
 }
