@@ -8,6 +8,7 @@ import { resolveAccount } from "./account.js";
 import { getFastApiRuntime } from "./runtime.js";
 import { setTaskId } from "./task-map.js";
 import { getWsClient } from "./ws-send.js";
+import { selectWorkerAgent } from "./dispatcher.js";
 
 /**
  * Parse and validate an inbound webhook payload from FastAPI.
@@ -202,15 +203,18 @@ export async function handleFastApiMessage(params: {
   // Store task_id mapping so outbound.sendText can find it
   setTaskId(fastapiTo, payload.task_id);
 
-  // Resolve agent route, then override session key to ensure isolation
-  const route = core.channel.routing.resolveAgentRoute({
-    cfg,
-    channel: "fastapi",
-    accountId: DEFAULT_ACCOUNT_ID,
-    from: fastapiFrom,
-    to: fastapiTo,
-    chatType: "direct",
+  // Pick a worker agent for this task (bypasses default channel bindings).
+  const selection = selectWorkerAgent({
+    fastapiCfg,
+    taskId: payload.task_id,
   });
+  log(
+    `fastapi: selected worker agent=${selection.agentId} task_id=${payload.task_id} strategy=${selection.strategy}`,
+  );
+  const route = {
+    agentId: selection.agentId,
+    accountId: DEFAULT_ACCOUNT_ID,
+  };
 
   // Force unique session per task
   const sessionKey = `agent:${route.agentId}:fastapi:direct:${payload.task_id}`;

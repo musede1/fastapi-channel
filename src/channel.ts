@@ -42,6 +42,14 @@ export const fastApiPlugin: ChannelPlugin<ResolvedFastApiAccount> = {
         allowFrom: { type: "array", items: { type: "string" } },
         mediaMaxMb: { type: "number", minimum: 1 },
         downloadTimeoutMs: { type: "integer", minimum: 1000 },
+        workerAgents: {
+          type: "array",
+          items: { type: "string" },
+        },
+        dispatchStrategy: {
+          type: "string",
+          enum: ["round_robin"],
+        },
       },
     },
   },

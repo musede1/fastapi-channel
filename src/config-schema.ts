@@ -18,5 +18,11 @@ export const FastApiConfigSchema = z
 
     /** Timeout for downloading files (ms) */
     downloadTimeoutMs: z.number().int().positive().optional().default(30_000),
+
+    /** Worker agent IDs to dispatch tasks across. Defaults to ["xiaoneng"] when omitted. */
+    workerAgents: z.array(z.string()).optional(),
+
+    /** Strategy used to pick a worker agent for an inbound task. */
+    dispatchStrategy: z.enum(["round_robin"]).optional().default("round_robin"),
   })
   .strict();
