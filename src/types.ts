@@ -3,6 +3,12 @@ import type { FastApiConfigSchema } from "./config-schema.js";
 
 export type FastApiConfig = z.infer<typeof FastApiConfigSchema>;
 
+export type ResolvedBackend = {
+  id: string;
+  wsUrl: string;
+  enabled: boolean;
+};
+
 export type ResolvedFastApiAccount = {
   accountId: string;
   enabled: boolean;

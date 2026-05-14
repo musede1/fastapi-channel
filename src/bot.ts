@@ -6,8 +6,8 @@ import type { InboundWebhookPayload, FastApiTaskContext, DownloadedFile } from "
 import { downloadFile, resolveFilename, inferPlaceholder } from "./client.js";
 import { resolveAccount } from "./account.js";
 import { getFastApiRuntime } from "./runtime.js";
-import { setTaskId } from "./task-map.js";
-import { getWsClient } from "./ws-send.js";
+import { setTaskId, setTaskBackend } from "./task-map.js";
+import { sendResultForTask } from "./ws-send.js";
 import { selectWorkerAgent } from "./dispatcher.js";
 
 /**
@@ -144,13 +144,16 @@ export function buildAgentBody(ctx: FastApiTaskContext): string {
 
 /**
  * Handle a parsed inbound payload: download files, build context, dispatch to agent.
+ * `backendId` identifies which backend (prod / dev / ...) the task came from, so
+ * the eventual result routes back to the same backend.
  */
 export async function handleFastApiMessage(params: {
   cfg: ClawdbotConfig;
+  backendId: string;
   payload: InboundWebhookPayload;
   log?: (msg: string) => void;
 }): Promise<void> {
-  const { cfg, payload, log = console.log } = params;
+  const { cfg, backendId, payload, log = console.log } = params;
 
   if (payload.event_type === "heartbeat") {
     log(`fastapi: heartbeat received, task_id=${payload.task_id}`);
@@ -202,6 +205,8 @@ export async function handleFastApiMessage(params: {
 
   // Store task_id mapping so outbound.sendText can find it
   setTaskId(fastapiTo, payload.task_id);
+  // Remember which backend originated this task so results route back to it.
+  setTaskBackend(payload.task_id, backendId);
 
   // Pick a worker agent for this task (bypasses default channel bindings).
   const selection = selectWorkerAgent({
@@ -269,15 +274,13 @@ export async function handleFastApiMessage(params: {
         accumulatedText += text;
 
         if (info?.kind === "final" || !info?.kind) {
-          const client = getWsClient();
-          if (client) {
-            client.sendResult({
-              task_id: payload.task_id,
-              status: "completed",
-              content: accumulatedText,
-              timestamp: Math.floor(Date.now() / 1000),
-            });
-          }
+          sendResultForTask({
+            taskId: payload.task_id,
+            status: "completed",
+            content: accumulatedText,
+            timestamp: Math.floor(Date.now() / 1000),
+            log,
+          });
           accumulatedText = "";
         }
       },

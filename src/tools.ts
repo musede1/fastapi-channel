@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
-import { getWsClient } from "./ws-send.js";
+import { sendResultForTask } from "./ws-send.js";
 
 const KeywordRowSchema = Type.Object({
   分组: Type.String(),
@@ -66,20 +66,16 @@ export function registerFastApiTools(api: OpenClawPluginApi) {
             sheet2: Record<string, unknown>[];
           };
 
-          const client = getWsClient();
-          if (!client) {
-            return json({ error: "WebSocket not connected" });
-          }
-
-          const sent = client.sendResult({
-            task_id: p.task_id,
+          const sent = sendResultForTask({
+            taskId: p.task_id,
             status: "completed",
             content: JSON.stringify({ sheet1: p.sheet1, sheet2: p.sheet2 }),
             timestamp: Math.floor(Date.now() / 1000),
+            log: (m) => api.rawLog?.warn(m),
           });
 
           if (!sent) {
-            return json({ error: "Failed to send result via WebSocket" });
+            return json({ error: "Failed to send result via WebSocket — no backend mapping or client offline" });
           }
 
           return json({

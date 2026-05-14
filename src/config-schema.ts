@@ -1,11 +1,22 @@
 import { z } from "zod";
 
+export const BackendSchema = z
+  .object({
+    id: z.string().min(1),
+    wsUrl: z.string().min(1),
+    enabled: z.boolean().optional().default(true),
+  })
+  .strict();
+
 export const FastApiConfigSchema = z
   .object({
     enabled: z.boolean().optional(),
 
-    /** WebSocket URL to connect to the Fastify server */
+    /** Legacy single-backend WebSocket URL. Synthesized into backends[0] when `backends` is unset. */
     wsUrl: z.string().optional(),
+
+    /** Multiple backends (e.g. prod / dev). Each runs its own WS client; results route back to the originating backend. */
+    backends: z.array(BackendSchema).optional(),
 
     /** Direct Message policy */
     dmPolicy: z.enum(["open", "allowlist"]).optional().default("open"),
